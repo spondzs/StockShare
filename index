@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>SpondFlow Stock Share</title>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f8fafc;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 18px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      box-sizing: border-box;
+    }
+
+    .title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .muted {
+      font-size: 14px;
+      color: #6b7280;
+      line-height: 1.55;
+      margin: 0;
+    }
+
+    .brand {
+      display: inline-block;
+      margin-top: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #eff6ff;
+      color: #2f6fed;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .btn {
+      width: 100%;
+      margin-top: 16px;
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-weight: 700;
+      background: #2f6fed;
+      color: white;
+    }
+
+    .btn-secondary {
+      background: #e5e7eb;
+      color: #111827;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="card">
+    <div class="title" id="title">กำลังเตรียมสต็อกสำหรับแชร์...</div>
+    <p class="muted" id="desc">
+      ระบบกำลังโหลดข้อมูลล่าสุด กรุณารอสักครู่
+    </p>
+    <div class="brand" id="brandText">SPONDFLOW</div>
+  </div>
+
+  <script>
+    // =====================================================
+    // CONFIG: แก้แค่ 2 บรรทัดนี้
+    // =====================================================
+    const LIFF_ID = "2009366271-TiSiW5ES";
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbw4jAzjWors_9dwQx1bI2RpVzm56icKOcTDYutQZIindgZb3f67MqoduccqgFnM6TzgaA/exec"; 
+    // ตัวอย่าง GAS_URL:
+    // https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec
+
+    // =====================================================
+    // UI helper
+    // =====================================================
+    function setStatus(title, desc, brand) {
+      document.getElementById("title").textContent = title || "";
+      document.getElementById("desc").textContent = desc || "";
+      document.getElementById("brandText").textContent = brand || "SPONDFLOW";
+    }
+
+    function getParam(name, fallback) {
+      const url = new URL(window.location.href);
+      return url.searchParams.get(name) || fallback || "";
+    }
+
+    // =====================================================
+    // JSONP helper สำหรับเรียก GAS กัน CORS
+    // เพราะ doGet ฝั่ง GAS รองรับ callback อยู่แล้ว
+    // =====================================================
+    function loadJsonp(url) {
+      return new Promise(function(resolve, reject) {
+        const cbName =
+          "jsonp_cb_" +
+          Date.now() +
+          "_" +
+          Math.floor(Math.random() * 1000000);
+
+        window[cbName] = function(data) {
+          try {
+            delete window[cbName];
+            script.remove();
+          } catch (e) {}
+
+          resolve(data);
+        };
+
+        const script = document.createElement("script");
+        script.src = url + (url.indexOf("?") >= 0 ? "&" : "?") + "callback=" + encodeURIComponent(cbName);
+
+        script.onerror = function() {
+          try {
+            delete window[cbName];
+            script.remove();
+          } catch (e) {}
+
+          reject(new Error("โหลดข้อมูลจาก GAS ไม่สำเร็จ"));
+        };
+
+        document.body.appendChild(script);
+      });
+    }
+
+    // =====================================================
+    // Main
+    // =====================================================
+    async function main() {
+      try {
+        const brand = String(getParam("brand", "vivo")).toLowerCase();
+        const label = brand === "iqoo" ? "iQOO" : "vivo";
+
+        setStatus(
+          "กำลังเตรียมสต็อก " + label + "...",
+          "ระบบจะเปิดหน้าต่างเลือกผู้รับให้อัตโนมัติ",
+          "SPONDFLOW · " + label.toUpperCase()
+        );
+
+        await liff.init({ liffId: LIFF_ID });
+
+        if (!liff.isLoggedIn()) {
+          liff.login({ redirectUri: window.location.href });
+          return;
+        }
+
+        const apiUrl =
+          GAS_URL +
+          "?action=stock_share_payload" +
+          "&brand=" + encodeURIComponent(brand);
+
+        const data = await loadJsonp(apiUrl);
+
+        if (!data || data.ok !== true) {
+          throw new Error((data && (data.error || data.message)) || "GAS payload ไม่ถูกต้อง");
+        }
+
+        if (!Array.isArray(data.messages) || !data.messages.length) {
+          throw new Error("ไม่พบ messages สำหรับแชร์");
+        }
+
+        if (!liff.isApiAvailable("shareTargetPicker")) {
+          throw new Error("shareTargetPicker ยังใช้งานไม่ได้บน LIFF นี้");
+        }
+
+        setStatus(
+          "เลือกผู้รับเพื่อแชร์สต็อก",
+          "เลือกตัวแทนจำหน่ายหรือกลุ่มที่ต้องการส่ง Stock Flex ได้เลย",
+          "SPONDFLOW · SHARE"
+        );
+
+        const result = await liff.shareTargetPicker(data.messages);
+
+        // result อาจเป็น null ถ้าผู้ใช้กดยกเลิก
+        if (result) {
+          setStatus(
+            "แชร์เรียบร้อยครับ",
+            "ระบบส่ง Stock Flex ให้ผู้รับที่เลือกแล้ว",
+            "DONE"
+          );
+
+          setTimeout(function() {
+            if (liff.isInClient()) liff.closeWindow();
+          }, 900);
+        } else {
+          setStatus(
+            "ยกเลิกการแชร์",
+            "ยังไม่ได้ส่ง Stock Flex ออกไปครับ",
+            "CANCELLED"
+          );
+        }
+
+      } catch (err) {
+        console.error(err);
+
+        setStatus(
+          "เกิดข้อผิดพลาด",
+          String(err && err.message ? err.message : err),
+          "ERROR"
+        );
+
+        const card = document.querySelector(".card");
+
+        const retryBtn = document.createElement("button");
+        retryBtn.className = "btn";
+        retryBtn.textContent = "ลองใหม่อีกครั้ง";
+        retryBtn.onclick = function() {
+          window.location.reload();
+        };
+
+        const closeBtn = document.createElement("button");
+        closeBtn.className = "btn btn-secondary";
+        closeBtn.textContent = "ปิดหน้านี้";
+        closeBtn.onclick = function() {
+          if (window.liff && liff.isInClient()) {
+            liff.closeWindow();
+          }
+        };
+
+        card.appendChild(retryBtn);
+        card.appendChild(closeBtn);
+      }
+    }
+
+    main();
+  </script>
+</body>
+</html>
